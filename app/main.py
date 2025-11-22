@@ -3,20 +3,60 @@ Main FastAPI application for BYB AI.
 """
 
 from typing import Dict, Any, Optional
-from fastapi import FastAPI, File, UploadFile, HTTPException, Body
+from fastapi import FastAPI, File, UploadFile, HTTPException, Body, Security, Header
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 import base64
+import secrets
 
 from app.services.ocr_service import OCRService
 from app.services.ner_service import NERService
 from app.services.validation_service import ValidationService
 from app.models import ExtractionResult
+from app.config import settings
 
 app = FastAPI(
     title="BYB AI API",
     description="REST API for BYB AI application",
     version="1.0.0"
 )
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def verify_api_key(x_api_key: str = Security(api_key_header)) -> str:
+    """
+    Verify API key from request header.
+    
+    Args:
+        x_api_key: API key from X-API-Key header
+        
+    Returns:
+        The validated API key
+        
+    Raises:
+        HTTPException: If API key is missing or invalid
+    """
+    if not settings.api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="API key not configured on server. Please contact administrator."
+        )
+    
+    if not x_api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="API key is required. Please provide X-API-Key header."
+        )
+    
+    if not secrets.compare_digest(x_api_key, settings.api_key):
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key"
+        )
+    
+    return x_api_key
+
 
 ocr_service = OCRService()
 ner_service = NERService()
@@ -84,7 +124,8 @@ async def root() -> RootResponse:
 
 @app.post("/ocr/extract", response_model=OCRResponse, tags=["OCR"])
 async def extract_text_from_document(
-    file: UploadFile = File(..., description="PDF or image file to extract text from")
+    file: UploadFile = File(..., description="PDF or image file to extract text from"),
+    api_key: str = Security(verify_api_key)
 ) -> OCRResponse:
     """
     Extract text from an uploaded document (PDF or image).
@@ -123,7 +164,8 @@ async def extract_text_from_document(
 
 @app.post("/ner/extract", response_model=ExtractionResult, tags=["NER"])
 async def extract_entities_from_document(
-    file: UploadFile = File(..., description="PDF or image file to extract entities from")
+    file: UploadFile = File(..., description="PDF or image file to extract entities from"),
+    api_key: str = Security(verify_api_key)
 ) -> ExtractionResult:
     """
     Extract entities from an uploaded document (PDF or image).
@@ -168,7 +210,8 @@ async def extract_entities_from_document(
 
 @app.post("/validate", response_model=ValidationResponse, tags=["Validation"])
 async def validate_document(
-    file: UploadFile = File(..., description="PDF or image file to validate")
+    file: UploadFile = File(..., description="PDF or image file to validate"),
+    api_key: str = Security(verify_api_key)
 ) -> ValidationResponse:
     """
     Validate an uploaded document (PDF or image).
@@ -219,7 +262,8 @@ async def validate_document(
 
 @app.post("/validate-bytes", response_model=ValidationResponse, tags=["Validation"])
 async def validate_document_bytes(
-    request: BytesRequest = Body(..., description="Base64-encoded document bytes and optional filename")
+    request: BytesRequest = Body(..., description="Base64-encoded document bytes and optional filename"),
+    api_key: str = Security(verify_api_key)
 ) -> ValidationResponse:
     """
     Validate document bytes (PDF or image).

@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     langextract_api_key: Optional[str] = None
     ner_model_name: str = "gemini-flash-lite-latest"
     
+    # API Key Authentication
+    api_key: Optional[str] = None
+    
     class Config:
         """Pydantic configuration."""
         env_file = ".env"
