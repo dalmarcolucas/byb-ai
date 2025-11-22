@@ -190,27 +190,10 @@ Important instructions:
             
             logger.info(f"Extracted {fields_extracted}/{len(entity_definitions)} fields in {processing_time:.2f}s")
             
-            return {
-                "entities": entities,
-                "extraction_metadata": {
-                    "model_used": settings.ner_model_name,
-                    "fields_requested": len(entity_definitions),
-                    "fields_extracted": fields_extracted,
-                    "processing_time": round(processing_time, 2)
-                }
-            }
+            return entities
         
         except Exception as e:
             processing_time = time.time() - start_time
             logger.error(f"Error extracting entities: {e}", exc_info=True)
             
-            return {
-                "entities": {},
-                "extraction_metadata": {
-                    "model_used": settings.ner_model_name,
-                    "fields_requested": len(entity_definitions),
-                    "fields_extracted": 0,
-                    "processing_time": round(processing_time, 2),
-                    "error": str(e)
-                }
-            }
+            return {}

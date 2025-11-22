@@ -261,11 +261,7 @@ class OCRService:
             
             logger.info(f"Extracted text from {num_pages} page(s) with confidence {avg_confidence:.4f}")
             
-            return {
-                "text": combined_text,
-                "confidence": avg_confidence,
-                "num_pages": num_pages
-            }
+            return combined_text
         
         except Exception as e:
             logger.error(f"Error in async PDF processing: {e}")
@@ -323,10 +319,7 @@ class OCRService:
                 if block_count > 0:
                     confidence = total_confidence / block_count
             
-            return {
-                "text": text,
-                "confidence": confidence
-            }
+            return text
         
         except Exception as e:
             logger.error(f"Error extracting text from image: {e}")
@@ -345,14 +338,7 @@ class OCRService:
             filename: Original filename to determine file type
             
         Returns:
-            Dictionary with extracted text and metadata:
-            {
-                "text": "<extracted text>",
-                "metadata": {
-                    "num_pages": <number of pages>,
-                    "confidence": <average confidence score>
-                }
-            }
+            Extracted text as string
         """
         if not self.vision_client:
             raise RuntimeError("Google Cloud Vision client not initialized. Please check credentials.")
@@ -363,29 +349,11 @@ class OCRService:
             is_pdf = file_ext == ".pdf" or document[:4] == b'%PDF'
             
             if is_pdf:
-                # Use async batch annotation for PDFs
                 logger.info("Processing PDF document with async batch annotation")
-                result = self._extract_text_from_pdf_async(document, filename)
-                
-                return {
-                    "text": result["text"],
-                    "metadata": {
-                        "num_pages": result["num_pages"],
-                        "confidence": round(result["confidence"], 4)
-                    }
-                }
+                return self._extract_text_from_pdf_async(document, filename)
             else:
-                # Process as image directly
                 logger.info("Processing image document")
-                result = self._extract_text_from_image(document)
-                
-                return {
-                    "text": result["text"],
-                    "metadata": {
-                        "num_pages": 1,
-                        "confidence": round(result["confidence"], 4)
-                    }
-                }
+                return self._extract_text_from_image(document)
         
         except Exception as e:
             logger.error(f"Error in extract_text: {e}")

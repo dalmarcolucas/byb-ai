@@ -34,14 +34,13 @@ class RootResponse(BaseModel):
 class OCRResponse(BaseModel):
     """OCR extraction response model."""
     text: str
-    metadata: Dict[str, Any]
 
 
 class NERResponse(BaseModel):
     """NER extraction response model."""
-    entities: Dict[str, Any]
-    extraction_metadata: Dict[str, Any]
-    ocr_metadata: Dict[str, Any]
+    responsible_engineer: str
+    date: str
+    construction_progress_percentage: float
 
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
@@ -103,7 +102,7 @@ async def extract_text_from_document(
             filename=file.filename or "unknown"
         )
         
-        return OCRResponse(**result)
+        return OCRResponse(text=result)
         
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -146,13 +145,9 @@ async def extract_entities_from_document(
             filename=file.filename or "unknown"
         )
         
-        ner_result = await ner_service.extract_entities(text=ocr_result["text"])
+        entities = await ner_service.extract_entities(text=ocr_result)
         
-        return NERResponse(
-            entities=ner_result["entities"],
-            extraction_metadata=ner_result["extraction_metadata"],
-            ocr_metadata=ocr_result["metadata"]
-        )
+        return NERResponse(**entities)
         
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
