@@ -28,7 +28,7 @@ class RootResponse(BaseModel):
 async def health_check() -> HealthResponse:
     """
     Health check endpoint.
-    
+
     Returns:
         HealthResponse containing status and message indicating the API is healthy.
     """
@@ -42,7 +42,7 @@ async def health_check() -> HealthResponse:
 async def root() -> RootResponse:
     """
     Root endpoint.
-    
+
     Returns:
         RootResponse with welcome message and health check path.
     """
