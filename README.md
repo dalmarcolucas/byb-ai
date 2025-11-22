@@ -55,6 +55,10 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 - `GET /` - Root endpoint with welcome message
 - `GET /health` - Health check endpoint
 
+### Document Processing
+
+- `POST /validate` - Validate a document (PDF or image) by extracting and validating entities
+
 ### Documentation
 
 - `GET /docs` - Interactive Swagger UI documentation
@@ -62,6 +66,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 - `GET /openapi.json` - OpenAPI schema
 
 ## Example Usage
+
+### Health Check
 
 Check API health:
 ```bash
@@ -75,3 +81,29 @@ Response:
     "message": "BYB AI API is running"
 }
 ```
+
+### Validate Document
+
+Validate a document and extract entities:
+```bash
+curl -X POST "http://localhost:8000/validate" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@/path/to/document.pdf"
+```
+
+Response:
+```json
+{
+    "is_valid": true,
+    "extraction": {
+        "responsible_engineer": "João Silva",
+        "date": "15/03/2024",
+        "construction_progress_percentage": 75.0
+    }
+}
+```
+
+The validation service checks:
+- Responsible engineer field is not empty
+- Date field is not empty
+- Construction progress percentage is between 30.0 and 100.0
