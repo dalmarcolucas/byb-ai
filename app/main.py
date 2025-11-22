@@ -27,6 +27,7 @@ from app.services.ocr_service import OCRService
 from app.services.ner_service import NERService
 from app.services.validation_service import ValidationService
 from app.services.upload_service import UploadService
+from app.services.blockchain_service import BlockchainService
 from app.models import ExtractionResult
 from app.config import settings
 
@@ -78,6 +79,23 @@ ner_service = NERService()
 validation_service = ValidationService()
 upload_service = UploadService()
 
+# Initialize blockchain service if enabled
+blockchain_service: Optional[BlockchainService] = None
+if settings.blockchain_enabled and settings.blockchain_rpc_url and settings.escrow_contract_address:
+    try:
+        blockchain_service = BlockchainService(
+            rpc_url=settings.blockchain_rpc_url,
+            contract_address=settings.escrow_contract_address,
+            abi_file_path="contracts/EscrowManager.json",
+            private_key=settings.oracle_private_key,
+            chain_id=settings.blockchain_chain_id
+        )
+        logging.info(f"Blockchain service initialized. Oracle address: {blockchain_service.get_oracle_address()}")
+    except Exception as e:
+        logging.error(f"Failed to initialize blockchain service: {e}")
+else:
+    logging.info("Blockchain integration is disabled")
+
 
 class HealthResponse(BaseModel):
     """Health check response model."""
@@ -85,28 +103,21 @@ class HealthResponse(BaseModel):
     message: str
 
 
-class RootResponse(BaseModel):
-    """Root endpoint response model."""
-    message: str
-    health_check: str
-
-
-class OCRResponse(BaseModel):
-    """OCR extraction response model."""
-    text: str
-
-
 class ValidationResponse(BaseModel):
     """Validation response model."""
     is_valid: bool
     extraction: ExtractionResult
     upload_response: Optional[Dict[str, Any]] = None
+    blockchain_response: Optional[Dict[str, Any]] = None
 
 
-class BytesRequest(BaseModel):
-    """Request model for bytes-based document processing."""
-    document_bytes: str  # base64 encoded bytes
-    filename: Optional[str] = "document"
+class EscrowInfoResponse(BaseModel):
+    """Response model for escrow information."""
+    total_escrowed: int
+    total_released: int
+    last_released_milestone: int
+    total_milestones: int
+    developer: str
 
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
@@ -123,109 +134,10 @@ async def health_check() -> HealthResponse:
     )
 
 
-@app.get("/", response_model=RootResponse, tags=["Info"])
-async def root() -> RootResponse:
-    """
-    Root endpoint.
-
-    Returns:
-        RootResponse with welcome message and health check path.
-    """
-    return RootResponse(
-        message="Welcome to BYB AI API",
-        health_check="/health"
-    )
-
-
-@app.post("/ocr/extract", response_model=OCRResponse, tags=["OCR"])
-async def extract_text_from_document(
-    file: UploadFile = File(..., description="PDF or image file to extract text from"),
-    api_key: str = Security(verify_api_key)
-) -> OCRResponse:
-    """
-    Extract text from an uploaded document (PDF or image).
-    
-    Supported formats:
-    - PDF documents
-    - Images (JPEG, PNG, TIFF, etc.)
-    
-    Args:
-        file: Uploaded file containing the document
-        
-    Returns:
-        OCRResponse with extracted text and metadata (num_pages, confidence)
-        
-    Raises:
-        HTTPException: If file processing fails
-    """
-    try:
-        content = await file.read()
-        
-        if not content:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty")
-        
-        result = await ocr_service.extract_text(
-            document=content,
-            filename=file.filename or "unknown"
-        )
-        
-        return OCRResponse(text=result)
-        
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
-
-
-@app.post("/ner/extract", response_model=ExtractionResult, tags=["NER"])
-async def extract_entities_from_document(
-    file: UploadFile = File(..., description="PDF or image file to extract entities from"),
-    api_key: str = Security(verify_api_key)
-) -> ExtractionResult:
-    """
-    Extract entities from an uploaded document (PDF or image).
-    
-    This endpoint processes the document in two steps:
-    1. OCR: Extracts text from the document using Google Cloud Vision API
-    2. NER: Extracts structured entities (responsible engineer, date, construction progress) from the text
-    
-    Supported formats:
-    - PDF documents
-    - Images (JPEG, PNG, TIFF, etc.)
-    
-    Args:
-        file: Uploaded file containing the document
-        
-    Returns:
-        NERResponse with extracted entities and metadata
-        
-    Raises:
-        HTTPException: If file processing fails
-    """
-    try:
-        content = await file.read()
-        
-        if not content:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty")
-        
-        ocr_result = await ocr_service.extract_text(
-            document=content,
-            filename=file.filename or "unknown"
-        )
-        
-        entities = await ner_service.extract_entities(text=ocr_result)
-        
-        return entities
-        
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
-
-
 @app.post("/validate", response_model=ValidationResponse, tags=["Validation"])
 async def validate_document(
     file: UploadFile = File(..., description="PDF or image file to validate"),
+    building_id: int = Body(..., description="ID of the building to validate against"),
     api_key: str = Security(verify_api_key)
 ) -> ValidationResponse:
     """
@@ -242,6 +154,7 @@ async def validate_document(
     
     Args:
         file: Uploaded file containing the document
+        building_id: ID of the building to validate against
         
     Returns:
         ValidationResponse with validation result and extracted entities
@@ -265,20 +178,36 @@ async def validate_document(
         is_valid = validation_service.validate_extraction(entities)
         
         upload_response = None
+        blockchain_response = None
+        
         if is_valid:
+            # Upload file
             try:
                 upload_response = await upload_service.upload_file(
                     file_content=content,
                     filename=file.filename
                 )
             except RuntimeError as e:
-                # Log the error but don't fail the validation
                 print(f"Warning: Failed to upload file: {str(e)}")
+            
+            # Confirm milestone on blockchain if enabled
+            if blockchain_service:
+                try:
+                    milestone_number = int(entities.construction_progress_percentage / 10)  # Example: 30% = milestone 3
+                    
+                    blockchain_response = blockchain_service.confirm_milestone(
+                        building_id=building_id,
+                        milestone_number=milestone_number
+                    )
+                    print(f"Milestone {milestone_number} confirmed on blockchain: {blockchain_response['transaction_hash']}")
+                except Exception as e:
+                    print(f"Warning: Failed to confirm milestone on blockchain: {str(e)}")
         
         return ValidationResponse(
             is_valid=is_valid,
             extraction=entities,
-            upload_response=upload_response
+            upload_response=upload_response,
+            blockchain_response=blockchain_response
         )
         
     except RuntimeError as e:
@@ -287,70 +216,47 @@ async def validate_document(
         raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
 
 
-@app.post("/validate-bytes", response_model=ValidationResponse, tags=["Validation"])
-async def validate_document_bytes(
-    request: BytesRequest = Body(..., description="Base64-encoded document bytes and optional filename"),
+@app.get("/blockchain/status", response_model=Dict[str, Any], tags=["Blockchain"])
+async def blockchain_status(
     api_key: str = Security(verify_api_key)
-) -> ValidationResponse:
+) -> Dict[str, Any]:
     """
-    Validate document bytes (PDF or image).
+    Get blockchain integration status.
     
-    This endpoint accepts raw document bytes encoded as base64 instead of file uploads.
-    Useful when you already have the document bytes in memory.
+    Returns information about the blockchain connection, contract address,
+    and oracle account.
     
-    This endpoint processes the document in three steps:
-    1. OCR: Extracts text from the document using Google Cloud Vision API
-    2. NER: Extracts structured entities (responsible engineer, date, construction progress) from the text
-    3. Validation: Validates the extracted entities
-    
-    Supported formats:
-    - PDF documents
-    - Images (JPEG, PNG, TIFF, etc.)
-    
-    Args:
-        request: BytesRequest containing base64-encoded document bytes and optional filename
-        
     Returns:
-        ValidationResponse with validation result and extracted entities
-        
-    Raises:
-        HTTPException: If document processing fails
+        Dictionary with blockchain status information
     """
+    if not blockchain_service:
+        return {
+            "enabled": False,
+            "message": "Blockchain integration is not enabled"
+        }
+    
     try:
-        content = base64.b64decode(request.document_bytes)
+        is_connected = blockchain_service.is_connected()
+        oracle_address = blockchain_service.get_oracle_address()
+
+        oracle_balance = None
+        if is_connected and oracle_address:
+            balance_wei = blockchain_service.w3.eth.get_balance(oracle_address)
+            oracle_balance = float(balance_wei) / 10**18  # Convert to ETH
         
-        if not content:
-            raise HTTPException(status_code=400, detail="Document bytes are empty")
-        
-        ocr_result = await ocr_service.extract_text(
-            document=content,
-            filename=request.filename or "document"
-        )
-        
-        entities = await ner_service.extract_entities(text=ocr_result)
-        
-        is_valid = validation_service.validate_extraction(entities)
-        
-        upload_response = None
-        if is_valid:
-            try:
-                upload_response = await upload_service.upload_file(
-                    file_content=content,
-                    filename=request.filename
-                )
-            except RuntimeError as e:
-                # Log the error but don't fail the validation
-                print(f"Warning: Failed to upload file: {str(e)}")
-        
-        return ValidationResponse(
-            is_valid=is_valid,
-            extraction=entities,
-            upload_response=upload_response
-        )
-        
-    except base64.binascii.Error:
-        raise HTTPException(status_code=400, detail="Invalid base64 encoding")
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {
+            "enabled": True,
+            "connected": is_connected,
+            "rpc_url": blockchain_service.rpc_url,
+            "contract_address": blockchain_service.contract_address,
+            "oracle_address": oracle_address,
+            "oracle_balance_eth": oracle_balance,
+            "chain_id": blockchain_service.chain_id
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
+        return {
+            "enabled": True,
+            "connected": False,
+            "error": str(e)
+        }
+

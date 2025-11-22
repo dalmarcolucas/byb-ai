@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     upload_service_api_key: Optional[str] = None
     upload_service_timeout: float = 300.0  # 5 minutes default timeout
     
+    # Blockchain Configuration
+    blockchain_rpc_url: Optional[str] = None
+    escrow_contract_address: Optional[str] = None
+    oracle_private_key: Optional[str] = None
+    blockchain_chain_id: int = 1  # Default to Ethereum mainnet
+    blockchain_enabled: bool = False  # Enable/disable blockchain integration
+    
     class Config:
         """Pydantic configuration."""
         env_file = ".env"

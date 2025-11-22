@@ -1,6 +1,6 @@
 # byb-ai
 
-A Python REST API built with FastAPI for the BYB AI application.
+A Python REST API built with FastAPI for the BYB AI application with blockchain integration for construction milestone verification.
 
 ## Features
 
@@ -8,6 +8,7 @@ A Python REST API built with FastAPI for the BYB AI application.
 - OCR service using Google Cloud Vision API
 - NER (Named Entity Recognition) service using LangExtract and Google Gemini
 - Validation service for extracted entities
+- **Blockchain Oracle**: Confirms construction milestones on-chain via EscrowManager smart contract
 - Health check endpoints
 - Auto-generated OpenAPI/Swagger documentation
 - Pydantic models for request/response validation
@@ -67,7 +68,6 @@ docker compose up
 
 ### Health Checks
 
-- `GET /` - Root endpoint with welcome message
 - `GET /health` - Health check endpoint
 
 ### Document Processing
@@ -122,3 +122,45 @@ The validation service checks:
 - Responsible engineer field is not empty
 - Date field is not empty
 - Construction progress percentage is between 30.0 and 100.0
+
+## Blockchain Integration
+
+This API acts as an oracle for the [EscrowManager smart contract](https://github.com/Peixer/byb-sc/blob/main/contracts/EscrowManager.sol). When a document validation succeeds, the API automatically confirms construction milestones on-chain, enabling trustless escrow release.
+
+### Quick Setup
+
+1. Enable blockchain integration in `.env`:
+```bash
+BLOCKCHAIN_ENABLED=true
+BLOCKCHAIN_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY
+ESCROW_CONTRACT_ADDRESS=0x1234...
+ORACLE_PRIVATE_KEY=0xabcd...
+BLOCKCHAIN_CHAIN_ID=11155111
+```
+
+2. Install blockchain dependencies:
+```bash
+uv pip install web3 eth-account
+```
+
+3. Validate a document - milestone confirmation happens automatically:
+```bash
+curl -X POST "http://localhost:8000/validate" \
+  -H "Content-Type: multipart/form-data" \
+  -H "X-API-Key: your-api-key" \
+  -F "file=@/path/to/document.pdf"
+```
+
+Response includes blockchain transaction:
+```json
+{
+    "is_valid": true,
+    "extraction": { ... },
+    "blockchain_response": {
+        "transaction_hash": "0xabcd...",
+        "block_number": 12345678,
+        "gas_used": 145890,
+        "status": "success"
+    }
+}
+```
