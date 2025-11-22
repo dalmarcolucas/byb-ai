@@ -2,9 +2,10 @@
 Main FastAPI application for BYB AI.
 """
 
-from typing import Dict, Any
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from typing import Dict, Any, Optional
+from fastapi import FastAPI, File, UploadFile, HTTPException, Body
 from pydantic import BaseModel
+import base64
 
 from app.services.ocr_service import OCRService
 from app.services.ner_service import NERService
@@ -45,6 +46,12 @@ class ValidationResponse(BaseModel):
     """Validation response model."""
     is_valid: bool
     extraction: ExtractionResult
+
+
+class BytesRequest(BaseModel):
+    """Request model for bytes-based document processing."""
+    document_bytes: str  # base64 encoded bytes
+    filename: Optional[str] = "document"
 
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
@@ -204,6 +211,62 @@ async def validate_document(
             extraction=entities
         )
         
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
+
+
+@app.post("/validate-bytes", response_model=ValidationResponse, tags=["Validation"])
+async def validate_document_bytes(
+    request: BytesRequest = Body(..., description="Base64-encoded document bytes and optional filename")
+) -> ValidationResponse:
+    """
+    Validate document bytes (PDF or image).
+    
+    This endpoint accepts raw document bytes encoded as base64 instead of file uploads.
+    Useful when you already have the document bytes in memory.
+    
+    This endpoint processes the document in three steps:
+    1. OCR: Extracts text from the document using Google Cloud Vision API
+    2. NER: Extracts structured entities (responsible engineer, date, construction progress) from the text
+    3. Validation: Validates the extracted entities
+    
+    Supported formats:
+    - PDF documents
+    - Images (JPEG, PNG, TIFF, etc.)
+    
+    Args:
+        request: BytesRequest containing base64-encoded document bytes and optional filename
+        
+    Returns:
+        ValidationResponse with validation result and extracted entities
+        
+    Raises:
+        HTTPException: If document processing fails
+    """
+    try:
+        content = base64.b64decode(request.document_bytes)
+        
+        if not content:
+            raise HTTPException(status_code=400, detail="Document bytes are empty")
+        
+        ocr_result = await ocr_service.extract_text(
+            document=content,
+            filename=request.filename or "document"
+        )
+        
+        entities = await ner_service.extract_entities(text=ocr_result)
+        
+        is_valid = validation_service.validate_extraction(entities)
+        
+        return ValidationResponse(
+            is_valid=is_valid,
+            extraction=entities
+        )
+        
+    except base64.binascii.Error:
+        raise HTTPException(status_code=400, detail="Invalid base64 encoding")
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
