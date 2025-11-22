@@ -182,13 +182,13 @@ async def validate_document(
         
         if is_valid:
             # Upload file
-            # try:
-            #     upload_response = await upload_service.upload_file(
-            #         file_content=content,
-            #         filename=file.filename
-            #     )
-            # except RuntimeError as e:
-            #     print(f"Warning: Failed to upload file: {str(e)}")
+            try:
+                upload_response = await upload_service.upload_file(
+                    file_content=content,
+                    filename=file.filename
+                )
+            except RuntimeError as e:
+                print(f"Warning: Failed to upload file: {str(e)}")
             
             # Release last milestone funds on blockchain if enabled
             if blockchain_service:
