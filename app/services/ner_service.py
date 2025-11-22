@@ -5,6 +5,7 @@ from typing import Dict, Any, List, Optional
 from loguru import logger
 
 from app.config import settings
+from app.models import ExtractionResult
 
 try:
     import langextract as lx
@@ -118,7 +119,7 @@ Important instructions:
     async def extract_entities(
         self,
         text: str
-    ) -> Dict[str, Any]:
+    ) -> ExtractionResult:
         """
         Extract entities from text.
         
@@ -126,7 +127,7 @@ Important instructions:
             text: Input text to analyze
             
         Returns:
-            Dictionary with extracted entities and metadata
+            ExtractionResult object with extracted entities
         """
         entity_definitions = self.ENTITY_DEFINITIONS
         extraction_context = "construction report"
@@ -190,10 +191,18 @@ Important instructions:
             
             logger.info(f"Extracted {fields_extracted}/{len(entity_definitions)} fields in {processing_time:.2f}s")
             
-            return entities
+            return ExtractionResult(
+                responsible_engineer=entities.get("responsible_engineer") or "",
+                date=entities.get("date") or "",
+                construction_progress_percentage=entities.get("construction_progress_percentage") or 0.0
+            )
         
         except Exception as e:
             processing_time = time.time() - start_time
             logger.error(f"Error extracting entities: {e}", exc_info=True)
             
-            return {}
+            return ExtractionResult(
+                responsible_engineer="",
+                date="",
+                construction_progress_percentage=0.0
+            )

@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from app.services.ocr_service import OCRService
 from app.services.ner_service import NERService
+from app.models import ExtractionResult
 
 app = FastAPI(
     title="BYB AI API",
@@ -34,13 +35,6 @@ class RootResponse(BaseModel):
 class OCRResponse(BaseModel):
     """OCR extraction response model."""
     text: str
-
-
-class NERResponse(BaseModel):
-    """NER extraction response model."""
-    responsible_engineer: str
-    date: str
-    construction_progress_percentage: float
 
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
@@ -110,10 +104,10 @@ async def extract_text_from_document(
         raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
 
 
-@app.post("/ner/extract", response_model=NERResponse, tags=["NER"])
+@app.post("/ner/extract", response_model=ExtractionResult, tags=["NER"])
 async def extract_entities_from_document(
     file: UploadFile = File(..., description="PDF or image file to extract entities from")
-) -> NERResponse:
+) -> ExtractionResult:
     """
     Extract entities from an uploaded document (PDF or image).
     
@@ -147,7 +141,7 @@ async def extract_entities_from_document(
         
         entities = await ner_service.extract_entities(text=ocr_result)
         
-        return NERResponse(**entities)
+        return entities
         
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
