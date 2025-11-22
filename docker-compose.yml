@@ -3,10 +3,16 @@ version: '3.8'
 services:
   api:
     build: .
+    container_name: byb-ia
     ports:
-      - "8000:8000"
+      - 8000:8000
+    networks:
+      - npm_public
     volumes:
       - ./credentials:/app/credentials
     env_file:
       - .env
     restart: unless-stopped
+networks:
+  npm_public:
+    external: true
