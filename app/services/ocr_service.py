@@ -26,7 +26,6 @@ class OCRService:
     def _initialize_clients(self):
         """Initialize the Google Cloud Vision and Storage clients."""
         try:
-            # Set credentials from config if provided
             if settings.google_application_credentials:
                 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.google_application_credentials
             
@@ -81,7 +80,6 @@ class OCRService:
             raise RuntimeError("Google Cloud Storage client not initialized.")
         
         try:
-            # Parse GCS URI: gs://bucket-name/path
             uri_parts = gcs_uri.replace("gs://", "").split("/", 1)
             bucket_name = uri_parts[0]
             blob_name = uri_parts[1]
@@ -111,7 +109,6 @@ class OCRService:
             raise RuntimeError("Google Cloud Storage client not initialized.")
         
         try:
-            # Parse GCS URI: gs://bucket-name/path/
             uri_parts = gcs_prefix.replace("gs://", "").split("/", 1)
             bucket_name = uri_parts[0]
             prefix = uri_parts[1] if len(uri_parts) > 1 else ""
@@ -139,7 +136,6 @@ class OCRService:
         
         for gcs_uri in gcs_uris:
             try:
-                # Parse GCS URI
                 uri_parts = gcs_uri.replace("gs://", "").split("/", 1)
                 bucket_name = uri_parts[0]
                 blob_name = uri_parts[1]
@@ -170,14 +166,11 @@ class OCRService:
         output_gcs_prefix = None
         
         try:
-            # Upload PDF to GCS
             input_gcs_uri = self._upload_to_gcs(pdf_bytes, filename)
             
-            # Generate unique output prefix
             unique_id = str(uuid.uuid4())
             output_gcs_prefix = f"gs://{settings.gcs_bucket_name}/ocr_output/{unique_id}/"
             
-            # Configure input and output
             input_config = vision.InputConfig(
                 gcs_source=vision.GcsSource(uri=input_gcs_uri),
                 mime_type='application/pdf'
@@ -188,7 +181,6 @@ class OCRService:
                 batch_size=100  # Max pages per output file
             )
             
-            # Configure the request
             feature = vision.Feature(type_=vision.Feature.Type.DOCUMENT_TEXT_DETECTION)
             request = vision.AsyncAnnotateFileRequest(
                 features=[feature],
@@ -196,15 +188,12 @@ class OCRService:
                 output_config=output_config
             )
             
-            # Execute async batch annotation
             logger.info("Starting async batch annotation for PDF")
             operation = self.vision_client.async_batch_annotate_files(requests=[request])
             
-            # Wait for operation to complete
             logger.info("Waiting for operation to complete...")
             result = operation.result(timeout=420)
             
-            # Get output file location from the first response
             if not result.responses:
                 raise RuntimeError("No responses found in operation result")
             
@@ -212,24 +201,19 @@ class OCRService:
             output_uri = first_response.output_config.gcs_destination.uri
             logger.info(f"Operation completed, results at: {output_uri}")
             
-            # List all output files from the prefix
-            # The output is stored in output-1-to-X.json files where X depends on the number of pages
             blob_names = self._list_gcs_blobs(output_uri)
             
-            # Filter to only JSON files
             output_files = [name for name in blob_names if name.endswith('.json')]
-            output_files.sort()  # Ensure they're processed in order
+            output_files.sort()
             logger.info(f"Found {len(output_files)} output file(s): {output_files}")
             
             if not output_files:
                 raise RuntimeError("No output files found in GCS")
             
-            # Extract text and confidence from all output files
             all_text_parts = []
             all_confidences = []
             num_pages = 0
             
-            # Process each output file
             for output_file in output_files:
                 output_file_uri = f"gs://{settings.gcs_bucket_name}/{output_file}"
                 logger.info(f"Processing output file: {output_file_uri}")
@@ -237,17 +221,14 @@ class OCRService:
                 json_content = self._download_from_gcs(output_file_uri)
                 json_data = json.loads(json_content)
                 
-                # Parse responses from this file
                 for response in json_data.get('responses', []):
                     num_pages += 1
                     full_text_annotation = response.get('fullTextAnnotation', {})
                     
-                    # Extract text
                     text = full_text_annotation.get('text', '')
                     if text:
                         all_text_parts.append(text)
                     
-                    # Calculate confidence from pages
                     pages = full_text_annotation.get('pages', [])
                     for page in pages:
                         blocks = page.get('blocks', [])
@@ -255,7 +236,6 @@ class OCRService:
                             if 'confidence' in block:
                                 all_confidences.append(block['confidence'])
             
-            # Combine results
             combined_text = "\n\n".join(text for text in all_text_parts if text)
             avg_confidence = sum(all_confidences) / len(all_confidences) if all_confidences else 0.0
             
@@ -268,11 +248,9 @@ class OCRService:
             raise RuntimeError(f"Failed to process PDF: {str(e)}")
         
         finally:
-            # Clean up temporary files
             if input_gcs_uri:
                 self._cleanup_gcs_files(input_gcs_uri)
             if output_gcs_prefix:
-                # Try to clean up all output files (best effort)
                 try:
                     blob_names = self._list_gcs_blobs(output_gcs_prefix)
                     output_file_uris = [f"gs://{settings.gcs_bucket_name}/{name}" for name in blob_names]
@@ -301,10 +279,8 @@ class OCRService:
             if response.error.message:
                 raise Exception(f"Google Cloud Vision API error: {response.error.message}")
             
-            # Extract full text
             text = response.full_text_annotation.text if response.full_text_annotation else ""
             
-            # Calculate average confidence from pages
             confidence = 0.0
             if response.full_text_annotation and response.full_text_annotation.pages:
                 total_confidence = 0.0
@@ -344,7 +320,6 @@ class OCRService:
             raise RuntimeError("Google Cloud Vision client not initialized. Please check credentials.")
         
         try:
-            # Determine file type from filename or content
             file_ext = Path(filename).suffix.lower() if filename else ""
             is_pdf = file_ext == ".pdf" or document[:4] == b'%PDF'
             
