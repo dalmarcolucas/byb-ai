@@ -46,7 +46,7 @@
 │                   ▼ NO                           ▼ YES                       │
 │         Return validation result      ┌─────────────────────┐               │
 │                                       │  4a. UPLOAD SERVICE  │               │
-│                                       │  - Upload to storage │               │
+│                                       │  - Upload to Filecoin│               │
 │                                       └──────────┬──────────┘               │
 │                                                  │                           │
 │                                                  ▼                           │
@@ -111,7 +111,8 @@
                  ┌──────────────┐                            ┌──────────────┐
                  │    Upload    │                            │  Blockchain  │
                  │   Service    │                            │   Service    │
-                 └──────────────┘                            └──────┬───────┘
+                 │  (Filecoin)  │                            └──────┬───────┘
+                 └──────────────┘
                                                                     │
                                                                     │ Web3.py
                                                                     │
@@ -326,7 +327,7 @@ State Updated:
 │                                      │                    │             │
 │                             ┌────────▼────────┐  ┌────────▼──────────┐ │
 │                             │  Google Cloud   │  │  Upload Service   │ │
-│                             │  Vision API     │  │  (Storage)        │ │
+│                             │  Vision API     │  │  (Filecoin)       │ │
 │                             └─────────────────┘  └───────────────────┘ │
 │                                                                          │
 │  Environment Variables (from Secret Manager):                           │
