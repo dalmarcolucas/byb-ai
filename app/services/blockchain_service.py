@@ -1,6 +1,6 @@
 """
 Blockchain service for interacting with EscrowManager smart contract.
-This service acts as an oracle to confirm construction milestones.
+This service releases milestone funds based on building registry validation.
 """
 
 import logging
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class BlockchainService:
     """
     Service to interact with the EscrowManager smart contract.
-    Acts as an oracle to confirm construction milestones when validation succeeds.
+    Releases milestone funds based on building registry validation.
     """
     
     @staticmethod
@@ -95,73 +95,9 @@ class BlockchainService:
         self.account: Optional[LocalAccount] = None
         if private_key:
             self.account = Account.from_key(private_key)
-            logger.info(f"Blockchain service initialized with oracle account: {self.account.address}")
+            logger.info(f"Blockchain service initialized with account: {self.account.address}")
         else:
             logger.warning("Blockchain service initialized without private key (read-only mode)")
-    
-    def confirm_milestone(
-        self,
-        building_id: int,
-        milestone_number: int,
-        gas_limit: int = 200000
-    ) -> Dict[str, Any]:
-        """
-        Confirm a construction milestone on-chain.
-        This function acts as an oracle, recording validation results on the blockchain.
-        
-        Args:
-            building_id: The ID of the building
-            milestone_number: The milestone number to confirm (1-indexed)
-            gas_limit: Gas limit for the transaction
-            
-        Returns:
-            Dictionary containing transaction hash and receipt
-            
-        Raises:
-            RuntimeError: If private key is not configured or transaction fails
-        """
-        if not self.account:
-            raise RuntimeError("Cannot confirm milestone: private key not configured")
-        
-        try:
-            nonce = self.w3.eth.get_transaction_count(self.account.address)
-            
-            gas_price = self.w3.eth.gas_price
-            
-            transaction = self.contract.functions.confirmMilestone(
-                building_id,
-                milestone_number
-            ).build_transaction({
-                'chainId': self.chain_id,
-                'gas': gas_limit,
-                'gasPrice': gas_price,
-                'nonce': nonce,
-                'from': self.account.address
-            })
-            
-            signed_txn = self.w3.eth.account.sign_transaction(transaction, self.account.key)
-            
-            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
-            
-            logger.info(f"Milestone confirmation transaction sent: {tx_hash.hex()}")
-            
-            tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-            
-            if tx_receipt['status'] == 0:
-                raise RuntimeError(f"Transaction failed: {tx_hash.hex()}")
-            
-            logger.info(f"Milestone {milestone_number} confirmed for building {building_id}")
-            
-            return {
-                "transaction_hash": tx_hash.hex(),
-                "block_number": tx_receipt['blockNumber'],
-                "gas_used": tx_receipt['gasUsed'],
-                "status": "success"
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to confirm milestone: {str(e)}")
-            raise RuntimeError(f"Failed to confirm milestone on blockchain: {str(e)}")
     
     def release_milestone_funds(
         self,
@@ -169,8 +105,9 @@ class BlockchainService:
         gas_limit: int = 300000
     ) -> Dict[str, Any]:
         """
-        Release funds for confirmed milestones.
-        Anyone can call this function to release funds for confirmed milestones.
+        Release funds for the next milestone.
+        The contract will release funds for the next unreleased milestone based on 
+        the building registry's validation status.
         
         Args:
             building_id: The ID of the building
@@ -201,8 +138,9 @@ class BlockchainService:
             })
             
             signed_txn = self.w3.eth.account.sign_transaction(transaction, self.account.key)
+            logger.info(f"signed transaction info: {signed_txn}")
             
-            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
             
             logger.info(f"Funds release transaction sent: {tx_hash.hex()}")
             
@@ -257,5 +195,5 @@ class BlockchainService:
         return self.w3.is_connected()
     
     def get_oracle_address(self) -> Optional[str]:
-        """Get the oracle account address."""
+        """Get the account address."""
         return self.account.address if self.account else None
