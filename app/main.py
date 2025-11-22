@@ -8,6 +8,20 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 import base64
 import secrets
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+
+# Set specific loggers
+logging.getLogger("app.services.upload_service").setLevel(logging.DEBUG)
+logging.getLogger("httpx").setLevel(logging.WARNING)  # Reduce httpx noise
 
 from app.services.ocr_service import OCRService
 from app.services.ner_service import NERService

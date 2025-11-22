@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     # Upload Service Configuration
     upload_service_url: Optional[str] = None
     upload_service_api_key: Optional[str] = None
+    upload_service_timeout: float = 300.0  # 5 minutes default timeout
     
     class Config:
         """Pydantic configuration."""
