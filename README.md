@@ -38,6 +38,8 @@ cp .env.example .env
 
 ## Running the API
 
+### Local Development
+
 Start the API server:
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -47,6 +49,19 @@ For development with auto-reload:
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
+
+### Docker
+
+Build the Docker image:
+```bash
+docker build -t byb-ai .
+```
+
+Run with Docker Compose:
+```bash
+docker compose up
+```
+
 
 ## API Endpoints
 
