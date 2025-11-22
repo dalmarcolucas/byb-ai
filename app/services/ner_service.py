@@ -84,6 +84,37 @@ Important instructions:
         
         return prompt
     
+    def _create_extraction_examples(self) -> List[Any]:
+        """
+        Create example extractions for LangExtract.
+        
+        Returns:
+            List of ExampleData objects
+        """
+        examples = [
+            lx.data.ExampleData(
+                text="Construction Report - Project Alpha\nEngineer: João Silva\nDate: 15/03/2024\nProgress: 75% complete",
+                extractions=[
+                    lx.data.Extraction(
+                        extraction_class="responsible_engineer",
+                        extraction_text="João Silva",
+                        attributes={"description": "Name of the responsible engineer", "type": "string"}
+                    ),
+                    lx.data.Extraction(
+                        extraction_class="date",
+                        extraction_text="15/03/2024",
+                        attributes={"description": "Date in DD/MM/YYYY format", "type": "string"}
+                    ),
+                    lx.data.Extraction(
+                        extraction_class="construction_progress_percentage",
+                        extraction_text="75",
+                        attributes={"description": "Construction progress as a percentage (0-100)", "type": "float"}
+                    ),
+                ]
+            )
+        ]
+        return examples
+    
     async def extract_entities(
         self,
         text: str
@@ -112,10 +143,13 @@ Important instructions:
             prompt = self._build_extraction_prompt(entity_definitions, extraction_context)
             logger.debug(f"Extraction prompt built for context: {extraction_context}")
             
+            examples = self._create_extraction_examples()
+            
             logger.info(f"Extracting entities using {settings.ner_model_name} via LangExtract...")
             result = lx.extract(
                 text_or_documents=text,
                 prompt_description=prompt,
+                examples=examples,
                 model_id=settings.ner_model_name,
                 use_schema_constraints=True,
             )
