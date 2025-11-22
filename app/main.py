@@ -12,6 +12,7 @@ import secrets
 from app.services.ocr_service import OCRService
 from app.services.ner_service import NERService
 from app.services.validation_service import ValidationService
+from app.services.upload_service import UploadService
 from app.models import ExtractionResult
 from app.config import settings
 
@@ -61,8 +62,7 @@ def verify_api_key(x_api_key: str = Security(api_key_header)) -> str:
 ocr_service = OCRService()
 ner_service = NERService()
 validation_service = ValidationService()
-validation_service = ValidationService()
-validation_service = ValidationService()
+upload_service = UploadService()
 
 
 class HealthResponse(BaseModel):
@@ -86,6 +86,7 @@ class ValidationResponse(BaseModel):
     """Validation response model."""
     is_valid: bool
     extraction: ExtractionResult
+    upload_response: Optional[Dict[str, Any]] = None
 
 
 class BytesRequest(BaseModel):
@@ -249,9 +250,21 @@ async def validate_document(
         
         is_valid = validation_service.validate_extraction(entities)
         
+        upload_response = None
+        if is_valid:
+            try:
+                upload_response = await upload_service.upload_file(
+                    file_content=content,
+                    filename=file.filename
+                )
+            except RuntimeError as e:
+                # Log the error but don't fail the validation
+                print(f"Warning: Failed to upload file: {str(e)}")
+        
         return ValidationResponse(
             is_valid=is_valid,
-            extraction=entities
+            extraction=entities,
+            upload_response=upload_response
         )
         
     except RuntimeError as e:
@@ -304,9 +317,21 @@ async def validate_document_bytes(
         
         is_valid = validation_service.validate_extraction(entities)
         
+        upload_response = None
+        if is_valid:
+            try:
+                upload_response = await upload_service.upload_file(
+                    file_content=content,
+                    filename=request.filename
+                )
+            except RuntimeError as e:
+                # Log the error but don't fail the validation
+                print(f"Warning: Failed to upload file: {str(e)}")
+        
         return ValidationResponse(
             is_valid=is_valid,
-            extraction=entities
+            extraction=entities,
+            upload_response=upload_response
         )
         
     except base64.binascii.Error:

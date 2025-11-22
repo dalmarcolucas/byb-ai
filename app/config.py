@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # API Key Authentication
     api_key: Optional[str] = None
     
+    # Upload Service Configuration
+    upload_service_url: Optional[str] = None
+    upload_service_api_key: Optional[str] = None
+    
     class Config:
         """Pydantic configuration."""
         env_file = ".env"
