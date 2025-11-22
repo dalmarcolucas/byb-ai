@@ -6,6 +6,8 @@ A Python REST API built with FastAPI for the BYB AI application.
 
 - FastAPI web framework
 - OCR service using Google Cloud Vision API
+- NER (Named Entity Recognition) service using LangExtract and Google Gemini
+- Validation service for extracted entities
 - Health check endpoints
 - Auto-generated OpenAPI/Swagger documentation
 - Pydantic models for request/response validation
