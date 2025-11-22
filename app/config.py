@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     api_description: str = "REST API for BYB AI application"
     api_version: str = "1.0.0"
     
-    # Optional: Language extraction API key
     langextract_api_key: Optional[str] = None
+    ner_model_name: str = "gemini-flash-lite-latest"
     
     class Config:
         """Pydantic configuration."""

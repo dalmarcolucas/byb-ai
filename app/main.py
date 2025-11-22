@@ -7,6 +7,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from pydantic import BaseModel
 
 from app.services.ocr_service import OCRService
+from app.services.ner_service import NERService
 
 app = FastAPI(
     title="BYB AI API",
@@ -14,8 +15,8 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Initialize OCR service
 ocr_service = OCRService()
+ner_service = NERService()
 
 
 class HealthResponse(BaseModel):
@@ -33,7 +34,13 @@ class RootResponse(BaseModel):
 class OCRResponse(BaseModel):
     """OCR extraction response model."""
     text: str
-    metadata: Dict[str, Any]
+
+
+class NERResponse(BaseModel):
+    """NER extraction response model."""
+    responsible_engineer: str
+    date: str
+    construction_progress_percentage: float
 
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
@@ -85,20 +92,62 @@ async def extract_text_from_document(
         HTTPException: If file processing fails
     """
     try:
-        # Read file content
         content = await file.read()
         
-        # Validate file is not empty
         if not content:
             raise HTTPException(status_code=400, detail="Uploaded file is empty")
         
-        # Extract text using OCR service
         result = await ocr_service.extract_text(
             document=content,
             filename=file.filename or "unknown"
         )
         
-        return OCRResponse(**result)
+        return OCRResponse(text=result)
+        
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
+
+
+@app.post("/ner/extract", response_model=NERResponse, tags=["NER"])
+async def extract_entities_from_document(
+    file: UploadFile = File(..., description="PDF or image file to extract entities from")
+) -> NERResponse:
+    """
+    Extract entities from an uploaded document (PDF or image).
+    
+    This endpoint processes the document in two steps:
+    1. OCR: Extracts text from the document using Google Cloud Vision API
+    2. NER: Extracts structured entities (responsible engineer, date, construction progress) from the text
+    
+    Supported formats:
+    - PDF documents
+    - Images (JPEG, PNG, TIFF, etc.)
+    
+    Args:
+        file: Uploaded file containing the document
+        
+    Returns:
+        NERResponse with extracted entities and metadata
+        
+    Raises:
+        HTTPException: If file processing fails
+    """
+    try:
+        content = await file.read()
+        
+        if not content:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+        
+        ocr_result = await ocr_service.extract_text(
+            document=content,
+            filename=file.filename or "unknown"
+        )
+        
+        entities = await ner_service.extract_entities(text=ocr_result)
+        
+        return NERResponse(**entities)
         
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))

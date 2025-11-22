@@ -11,3 +11,6 @@ loguru==0.7.2
 google-cloud-vision==3.11.0
 google-cloud-storage==2.18.2
 Pillow==10.2.0
+
+# NER
+langextract>=1.0.9
