@@ -33,6 +33,7 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
+/credentials
 
 # Environment
 .env
