@@ -5,15 +5,33 @@ A Python REST API built with FastAPI for the BYB AI application.
 ## Features
 
 - FastAPI web framework
+- OCR service using Google Cloud Vision API
 - Health check endpoints
 - Auto-generated OpenAPI/Swagger documentation
 - Pydantic models for request/response validation
 
+## Prerequisites
+
+- Python 3.10+
+- [uv](https://github.com/astral-sh/uv) - Fast Python package installer
+- Google Cloud credentials for Vision API
+
 ## Installation
 
-1. Install dependencies:
+1. Install uv (if not already installed):
 ```bash
-pip install -r requirements.txt
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+2. Install dependencies:
+```bash
+uv pip install -r requirements.txt
+```
+
+3. Configure environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your Google Cloud credentials and bucket name
 ```
 
 ## Running the API
