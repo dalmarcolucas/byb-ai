@@ -4,7 +4,6 @@ Main FastAPI application for BYB AI.
 
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import Dict
 
 app = FastAPI(
     title="BYB AI API",
@@ -19,29 +18,35 @@ class HealthResponse(BaseModel):
     message: str
 
 
+class RootResponse(BaseModel):
+    """Root endpoint response model."""
+    message: str
+    health_check: str
+
+
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
-async def health_check() -> Dict[str, str]:
+async def health_check() -> HealthResponse:
     """
     Health check endpoint.
     
     Returns:
-        Dict containing status and message indicating the API is healthy.
+        HealthResponse containing status and message indicating the API is healthy.
     """
-    return {
-        "status": "ok",
-        "message": "BYB AI API is running"
-    }
+    return HealthResponse(
+        status="ok",
+        message="BYB AI API is running"
+    )
 
 
-@app.get("/", tags=["Health"])
-async def root() -> Dict[str, str]:
+@app.get("/", response_model=RootResponse, tags=["Info"])
+async def root() -> RootResponse:
     """
     Root endpoint.
     
     Returns:
-        Dict with welcome message.
+        RootResponse with welcome message and health check path.
     """
-    return {
-        "message": "Welcome to BYB AI API",
-        "health_check": "/health"
-    }
+    return RootResponse(
+        message="Welcome to BYB AI API",
+        health_check="/health"
+    )
