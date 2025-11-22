@@ -8,6 +8,8 @@ from pydantic import BaseModel
 
 from app.services.ocr_service import OCRService
 from app.services.ner_service import NERService
+from app.services.validation_service import ValidationService
+from app.models import ExtractionResult
 
 app = FastAPI(
     title="BYB AI API",
@@ -17,6 +19,9 @@ app = FastAPI(
 
 ocr_service = OCRService()
 ner_service = NERService()
+validation_service = ValidationService()
+validation_service = ValidationService()
+validation_service = ValidationService()
 
 
 class HealthResponse(BaseModel):
@@ -36,11 +41,10 @@ class OCRResponse(BaseModel):
     text: str
 
 
-class NERResponse(BaseModel):
-    """NER extraction response model."""
-    responsible_engineer: str
-    date: str
-    construction_progress_percentage: float
+class ValidationResponse(BaseModel):
+    """Validation response model."""
+    is_valid: bool
+    extraction: ExtractionResult
 
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
@@ -110,10 +114,10 @@ async def extract_text_from_document(
         raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
 
 
-@app.post("/ner/extract", response_model=NERResponse, tags=["NER"])
+@app.post("/ner/extract", response_model=ExtractionResult, tags=["NER"])
 async def extract_entities_from_document(
     file: UploadFile = File(..., description="PDF or image file to extract entities from")
-) -> NERResponse:
+) -> ExtractionResult:
     """
     Extract entities from an uploaded document (PDF or image).
     
@@ -147,7 +151,58 @@ async def extract_entities_from_document(
         
         entities = await ner_service.extract_entities(text=ocr_result)
         
-        return NERResponse(**entities)
+        return entities
+        
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
+
+
+@app.post("/validate", response_model=ValidationResponse, tags=["Validation"])
+async def validate_document(
+    file: UploadFile = File(..., description="PDF or image file to validate")
+) -> ValidationResponse:
+    """
+    Validate an uploaded document (PDF or image).
+    
+    This endpoint processes the document in three steps:
+    1. OCR: Extracts text from the document using Google Cloud Vision API
+    2. NER: Extracts structured entities (responsible engineer, date, construction progress) from the text
+    3. Validation: Validates the extracted entities
+    
+    Supported formats:
+    - PDF documents
+    - Images (JPEG, PNG, TIFF, etc.)
+    
+    Args:
+        file: Uploaded file containing the document
+        
+    Returns:
+        ValidationResponse with validation result and extracted entities
+        
+    Raises:
+        HTTPException: If file processing fails
+    """
+    try:
+        content = await file.read()
+        
+        if not content:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+        
+        ocr_result = await ocr_service.extract_text(
+            document=content,
+            filename=file.filename or "unknown"
+        )
+        
+        entities = await ner_service.extract_entities(text=ocr_result)
+        
+        is_valid = validation_service.validate_extraction(entities)
+        
+        return ValidationResponse(
+            is_valid=is_valid,
+            extraction=entities
+        )
         
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
